@@ -1,0 +1,642 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#101010">
+<title>REDD AUTO FARM</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#090909;color:#eee;
+ font-family:Arial,sans-serif;
+ -webkit-tap-highlight-color:transparent;
+}
+button,input{font:inherit}
+button{
+ border:1px solid #762020;
+ background:#202020;color:white;
+ border-radius:8px;padding:13px;
+ cursor:pointer;touch-action:manipulation;
+}
+button:active{background:#641010}
+input{
+ width:100%;padding:12px;
+ background:#202020;color:white;
+ border:1px solid #652020;
+ border-radius:7px;margin:6px 0;
+}
+.container{
+ width:100%;max-width:420px;
+ margin:auto;padding:12px;
+}
+.card{
+ background:#151515;border:1px solid #4b2020;
+ border-radius:12px;padding:15px;margin-bottom:12px;
+}
+header{
+ background:#300909;border-radius:9px;
+ text-align:center;padding:18px;
+ color:#ff3939;font-weight:bold;
+ font-size:21px;letter-spacing:2px;
+}
+h2{font-size:14px;color:#ff5555}
+.grid{
+ display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.job.selected{background:#791414;border-color:red}
+.controls{
+ display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+#dashboard,#register{display:none}
+#status{
+ background:#222;border-radius:8px;
+ padding:12px;font-size:12px;line-height:1.8;
+ overflow-wrap:anywhere;
+}
+#map{
+ display:block;width:100%;height:auto;
+ background:#222;border-radius:8px;
+ margin-top:10px;
+}
+small{color:#999}
+.danger{color:#ff5555}
+.success{color:#65d68a}
+button:disabled{opacity:.45}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<!-- LOGIN -->
+<section id="login" class="card">
+<header>☠ REDD AUTO FARM ☠</header>
+<h2>ACESSO AO SISTEMA</h2>
+<label>Usuário</label>
+<input value="Redd_anarchy" readonly>
+
+<label>Senha</label>
+<input id="password" type="password"
+autocomplete="current-password"
+placeholder="Digite sua senha">
+
+<button id="loginBtn" style="width:100%">
+ENTRAR
+</button>
+<p id="loginMessage"><small>Primeiro acesso: cadastre sua senha.</small></p>
+</section>
+
+<!-- CADASTRO -->
+<section id="register" class="card">
+<header>☠ REDD AUTO FARM ☠</header>
+<h2>CADASTRAR SENHA</h2>
+<input id="pass1" type="password"
+placeholder="Nova senha (mínimo 10 caracteres)">
+<input id="pass2" type="password"
+placeholder="Confirmar senha">
+<button id="registerBtn" style="width:100%">
+CADASTRAR
+</button>
+<p id="registerMessage"></p>
+</section>
+
+<!-- PAINEL -->
+<section id="dashboard">
+
+<div class="card">
+<header>☠ REDD AUTO FARM ☠</header>
+<p style="text-align:center">
+Usuário: <b>Redd_anarchy</b>
+</p>
+</div>
+
+<div class="card">
+<h2>⚙️ PROFISSÕES</h2>
+<div class="grid">
+<button class="job" data-job="Mina">⛏️ MINA</button>
+<button class="job" data-job="Trator">🚜 TRATOR</button>
+<button class="job" data-job="Coleta de ovos">🥚 OVOS</button>
+<button class="job" data-job="Entregador">🛵 ENTREGADOR</button>
+<button class="job" data-job="Caminhoneiro">🚛 CAMINHÃO</button>
+<button class="job" data-job="Coleta de leite">🥛 LEITE</button>
+</div>
+</div>
+
+<div class="card">
+<h2>🎮 CONTROLE</h2>
+<div class="controls">
+<button id="startBtn">▶ INICIAR</button>
+<button id="pauseBtn">Ⅱ PAUSAR</button>
+</div>
+<button id="stopBtn" style="width:100%;margin-top:8px">
+■ PARAR
+</button>
+</div>
+
+<div class="card">
+<h2>🔴 RASTREAMENTO VISUAL</h2>
+<label>Imagem do mapa</label>
+<input type="file" id="mapFile" accept="image/*">
+
+<label>Sensibilidade</label>
+<input type="range" id="sensitivity"
+min="80" max="240" value="150">
+
+<div class="controls">
+<button id="scanBtn">🎯 ANALISAR</button>
+<button id="clearBtn">LIMPAR MAPA</button>
+</div>
+
+<canvas id="map"></canvas>
+<p id="mapInfo"><small>Aguardando imagem.</small></p>
+</div>
+
+<div class="card">
+<h2>📊 STATUS</h2>
+<div id="status">
+Emprego: nenhum<br>
+Estado: aguardando<br>
+Mapa: desligado
+</div>
+<button id="logoutBtn" style="width:100%;margin-top:10px">
+SAIR DA CONTA
+</button>
+</div>
+
+<p style="text-align:center">
+<small>REDD AUTO FARM • PROFESSIONAL EDITION 3.0</small>
+</p>
+
+</section>
+</div>
+
+<script>
+"use strict";
+
+/* =================================
+   CONFIGURAÇÃO E ESTADO
+================================= */
+
+const $ = id => document.getElementById(id);
+
+const state = {
+ job:null,
+ running:false,
+ paused:false,
+ scanning:false,
+ image:null,
+ objectURL:null,
+ marker:null,
+ scanToken:0
+};
+
+const canvas=$("map");
+const ctx=canvas.getContext("2d",{
+ willReadFrequently:true
+});
+
+/* =================================
+   LOGIN E CADASTRO
+================================= */
+
+function hex(bytes){
+ return Array.from(bytes)
+ .map(x=>x.toString(16).padStart(2,"0"))
+ .join("");
+}
+
+function unhex(value){
+ const out=new Uint8Array(value.length/2);
+ for(let i=0;i<out.length;i++){
+  out[i]=parseInt(value.substr(i*2,2),16);
+ }
+ return out;
+}
+
+async function passwordHash(password,salt){
+ if(!crypto.subtle)throw Error("Criptografia indisponível.");
+
+ const key=await crypto.subtle.importKey(
+  "raw",new TextEncoder().encode(password),
+  "PBKDF2",false,["deriveBits"]
+ );
+
+ const result=await crypto.subtle.deriveBits({
+  name:"PBKDF2",
+  salt:salt,
+  iterations:150000,
+  hash:"SHA-256"
+ },key,256);
+
+ return hex(new Uint8Array(result));
+}
+
+function getSavedLogin(){
+ try{
+  return JSON.parse(localStorage.getItem("redd_login"));
+ }catch{
+  return null;
+ }
+}
+
+async function login(){
+ const pass=$("password").value;
+ const saved=getSavedLogin();
+
+ if(!pass){
+  $("loginMessage").textContent="Digite sua senha.";
+  return;
+ }
+
+ try{
+  if(!saved){
+   $("login").style.display="none";
+   $("register").style.display="block";
+   return;
+  }
+
+  const hash=await passwordHash(pass,unhex(saved.salt));
+
+  if(hash!==saved.hash){
+   $("loginMessage").textContent="Senha incorreta.";
+   return;
+  }
+
+  openDashboard();
+
+ }catch(error){
+  $("loginMessage").textContent="Erro: "+error.message;
+ }
+}
+
+async function register(){
+ const a=$("pass1").value;
+ const b=$("pass2").value;
+
+ if(a.length<10){
+  $("registerMessage").textContent="Use pelo menos 10 caracteres.";
+  return;
+ }
+
+ if(a!==b){
+  $("registerMessage").textContent="As senhas não coincidem.";
+  return;
+ }
+
+ try{
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const hash=await passwordHash(a,salt);
+
+  localStorage.setItem("redd_login",JSON.stringify({
+   salt:hex(salt),
+   hash:hash
+  }));
+
+  $("pass1").value="";
+  $("pass2").value="";
+  $("register").style.display="none";
+  $("login").style.display="block";
+  $("loginMessage").textContent="Senha cadastrada. Faça login.";
+
+ }catch(error){
+  $("registerMessage").textContent=error.message;
+ }
+}
+
+function openDashboard(){
+ $("login").style.display="none";
+ $("register").style.display="none";
+ $("dashboard").style.display="block";
+ $("password").value="";
+ updateStatus("Painel aberto");
+}
+
+/* =================================
+   CONTROLE DAS PROFISSÕES
+================================= */
+
+function selectJob(name,button){
+ state.job=name;
+
+ document.querySelectorAll(".job").forEach(b=>{
+  b.classList.remove("selected");
+ });
+
+ button.classList.add("selected");
+ updateStatus("Profissão selecionada");
+}
+
+function startJob(){
+ if(!state.job){
+  alert("Selecione uma profissão.");
+  return;
+ }
+
+ if(state.running&&!state.paused)return;
+
+ state.running=true;
+ state.paused=false;
+
+ updateStatus("Demonstração iniciada");
+}
+
+function pauseJob(){
+ if(!state.running)return;
+
+ state.paused=true;
+ updateStatus("Pausado");
+}
+
+function stopJob(){
+ state.running=false;
+ state.paused=false;
+ state.job=null;
+
+ document.querySelectorAll(".job").forEach(b=>{
+  b.classList.remove("selected");
+ });
+
+ updateStatus("Parado");
+}
+
+function updateStatus(message){
+ $("status").innerHTML=
+ "Emprego: "+(state.job||"Nenhum")+
+ "<br>Estado: "+message+
+ "<br>Marcador: "+(state.marker?"Detectado":"Aguardando")+
+ "<br>Automação no jogo: não integrada";
+}
+
+/* =================================
+   CARREGAMENTO SEGURO DA IMAGEM
+================================= */
+
+$("mapFile").addEventListener("change",event=>{
+ const file=event.target.files[0];
+ if(!file)return;
+
+ if(!file.type.startsWith("image/")){
+  alert("Arquivo de imagem inválido.");
+  return;
+ }
+
+ if(state.objectURL){
+  URL.revokeObjectURL(state.objectURL);
+ }
+
+ const url=URL.createObjectURL(file);
+ state.objectURL=url;
+
+ const img=new Image();
+
+ img.onload=()=>{
+  const max=700;
+  const scale=Math.min(1,max/img.width,max/img.height);
+
+  canvas.width=Math.max(1,Math.round(img.width*scale));
+  canvas.height=Math.max(1,Math.round(img.height*scale));
+
+  state.image=img;
+  state.marker=null;
+
+  drawImage();
+  $("mapInfo").textContent="Imagem carregada com sucesso.";
+  updateStatus("Mapa carregado");
+
+  URL.revokeObjectURL(url);
+  state.objectURL=null;
+ };
+
+ img.onerror=()=>{
+  URL.revokeObjectURL(url);
+  state.objectURL=null;
+  $("mapInfo").textContent="Erro ao carregar imagem.";
+ };
+
+ img.src=url;
+});
+
+function drawImage(){
+ if(!state.image)return;
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ ctx.drawImage(
+  state.image,0,0,canvas.width,canvas.height
+ );
+}
+
+/* =================================
+   DETECTOR DE LUZ VERMELHA
+   Processamento por etapas
+================================= */
+
+function cancelScan(){
+ state.scanToken++;
+ state.scanning=false;
+ $("scanBtn").disabled=false;
+}
+
+async function detectRed(){
+ if(!state.image){
+  alert("Carregue uma imagem do mapa.");
+  return;
+ }
+
+ if(state.scanning)return;
+
+ state.scanning=true;
+ const token=++state.scanToken;
+
+ $("scanBtn").disabled=true;
+ $("mapInfo").textContent="Analisando imagem...";
+
+ try{
+  drawImage();
+
+  const w=canvas.width;
+  const h=canvas.height;
+  const pixels=ctx.getImageData(0,0,w,h).data;
+  const threshold=Number($("sensitivity").value);
+
+  const cell=8;
+  const points=[];
+
+  // Processa em blocos para manter a interface responsiva.
+  for(let y=0;y<h;y+=cell*4){
+
+   if(token!==state.scanToken)return;
+
+   const endY=Math.min(y+cell*4,h);
+
+   for(let cy=y;cy<endY;cy+=cell){
+    for(let x=0;x<w;x+=cell){
+
+     let count=0;
+     let sx=0;
+     let sy=0;
+
+     for(let yy=cy;yy<Math.min(cy+cell,h);yy++){
+      for(let xx=x;xx<Math.min(x+cell,w);xx++){
+
+       const i=(yy*w+xx)*4;
+       const r=pixels[i];
+       const g=pixels[i+1];
+       const b=pixels[i+2];
+
+       if(
+        r>threshold &&
+        r>g*1.5 &&
+        r>b*1.4
+       ){
+        count++;
+        sx+=xx;
+        sy+=yy;
+       }
+      }
+     }
+
+     if(count>=3){
+      points.push({
+       x:sx/count,
+       y:sy/count,
+       count:count
+      });
+     }
+    }
+   }
+
+   // Libera o processamento para a interface.
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+
+  if(token!==state.scanToken)return;
+
+  if(!points.length){
+   state.marker=null;
+   $("mapInfo").textContent="Nenhuma região vermelha encontrada.";
+   updateStatus("Análise concluída");
+   return;
+  }
+
+  // Agrupa as regiões próximas para evitar
+  // interpretar cada pequeno pixel como destino.
+  const groups=[];
+
+  for(const p of points){
+   let group=groups.find(g=>
+    Math.hypot(g.x-p.x,g.y-p.y)<20
+   );
+
+   if(group){
+    group.x=(group.x*group.count+p.x)/(group.count+1);
+    group.y=(group.y*group.count+p.y)/(group.count+1);
+    group.count++;
+   }else{
+    groups.push({x:p.x,y:p.y,count:1});
+   }
+  }
+
+  groups.sort((a,b)=>b.count-a.count);
+  state.marker=groups[0];
+
+  drawImage();
+
+  ctx.beginPath();
+  ctx.arc(
+   state.marker.x,state.marker.y,13,0,Math.PI*2
+  );
+  ctx.strokeStyle="#ff2222";
+  ctx.lineWidth=3;
+  ctx.stroke();
+
+  $("mapInfo").textContent=
+   "Regiões: "+groups.length+
+   " | Marcador principal: X "+
+   Math.round(state.marker.x)+
+   " Y "+Math.round(state.marker.y);
+
+  updateStatus("Marcador visual identificado");
+
+ }catch(error){
+  $("mapInfo").textContent="Falha na análise: "+error.message;
+
+ }finally{
+  if(token===state.scanToken){
+   state.scanning=false;
+   $("scanBtn").disabled=false;
+  }
+ }
+}
+
+function clearMap(){
+ cancelScan();
+
+ state.image=null;
+ state.marker=null;
+
+ if(state.objectURL){
+  URL.revokeObjectURL(state.objectURL);
+  state.objectURL=null;
+ }
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ canvas.width=1;
+ canvas.height=1;
+
+ $("mapFile").value="";
+ $("mapInfo").textContent="Mapa limpo.";
+ updateStatus("Aguardando mapa");
+}
+
+/* =================================
+   EVENTOS
+================================= */
+
+$("loginBtn").addEventListener("click",login);
+$("registerBtn").addEventListener("click",register);
+
+$("startBtn").addEventListener("click",startJob);
+$("pauseBtn").addEventListener("click",pauseJob);
+$("stopBtn").addEventListener("click",stopJob);
+
+$("scanBtn").addEventListener("click",detectRed);
+$("clearBtn").addEventListener("click",clearMap);
+
+$("logoutBtn").addEventListener("click",()=>{
+ stopJob();
+ cancelScan();
+ $("dashboard").style.display="none";
+ $("login").style.display="block";
+ $("password").value="";
+});
+
+document.querySelectorAll(".job").forEach(button=>{
+ button.addEventListener("click",()=>{
+  selectJob(button.dataset.job,button);
+ });
+});
+
+// Evita deixar análise ativa quando a página
+// for encerrada ou atualizada.
+window.addEventListener("pagehide",()=>{
+ cancelScan();
+
+ if(state.objectURL){
+  URL.revokeObjectURL(state.objectURL);
+ }
+});
+
+// Inicialização
+if(getSavedLogin()){
+ $("loginMessage").textContent="Digite sua senha para entrar.";
+}else{
+ $("loginMessage").textContent="Cadastre uma senha no primeiro acesso.";
+}
+</script>
+</body>
+</html>
+
